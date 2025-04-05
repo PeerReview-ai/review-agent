@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run PeerReview
-        uses: PeerReview-ai/review-agent@v1
+        uses: PeerReview-ai/review-agent@v1.0.0
         with:
           api-key: ${{ secrets.PEERREVIEW_API_KEY }}
           api-endpoint: https://api.getpeerreview.com
