@@ -84,6 +84,7 @@ runs:
       shell: bash
       run: |
         # Create simple JSON payload
+        REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
         PAYLOAD='{
           "action": "opened",
           "repository": {
@@ -108,7 +109,7 @@ runs:
         RESPONSE=$(curl -s -X POST "${{ inputs.api-endpoint }}/api/webhook" \
           -H "Content-Type: application/json" \
           -H "x-github-event: pull_request" \
-          -H "x-github-delivery: ${{ github.event.head_commit.id }}" \
+          -H "x-github-delivery: ${{ github.run_id }}" \
           -H "Authorization: Bearer ${{ inputs.api-key }}" \
           -d "$PAYLOAD")
         
