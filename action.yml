@@ -83,14 +83,19 @@ runs:
     - name: Trigger PeerReview
       shell: bash
       run: |
-        # Create simple JSON payload
-        PAYLOAD='{
+        # Get repository name
+        REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+        echo "Repository name: $REPO_NAME"
+        
+        # Create JSON payload with proper escaping
+        PAYLOAD=$(cat <<-END
+        {
           "action": "opened",
           "repository": {
             "owner": {
               "login": "${{ github.repository_owner }}"
             },
-            "name": "'$REPO_NAME'"
+            "name": "${REPO_NAME}"
           },
           "pull_request": {
             "number": ${{ github.event.pull_request.number }}
@@ -99,7 +104,9 @@ runs:
             "id": ${{ steps.get-installation.outputs.installation_id }}
           },
           "review_type": "${{ inputs.review-type }}"
-        }'
+        }
+        END
+        )
         
         echo "Sending webhook payload:"
         echo "$PAYLOAD" | jq '.'
@@ -108,7 +115,7 @@ runs:
         RESPONSE=$(curl -s -X POST "${{ inputs.api-endpoint }}/api/webhook" \
           -H "Content-Type: application/json" \
           -H "x-github-event: pull_request" \
-          -H "x-github-delivery: ${{ github.event.head_commit.id }}" \
+          -H "x-github-delivery: ${{ github.run_id }}" \
           -H "Authorization: Bearer ${{ inputs.api-key }}" \
           -d "$PAYLOAD")
         
