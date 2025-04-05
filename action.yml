@@ -1,0 +1,119 @@
+name: 'PeerReview'
+description: 'Automated code review using AI to provide senior engineer-like feedback on pull requests'
+
+inputs:
+  api-key:
+    description: 'API key for the PeerReview service'
+    required: true
+  api-endpoint:
+    description: 'The endpoint URL of the PeerReview service'
+    required: true
+  review-type:
+    description: 'Type of review to perform (full, focused, security)'
+    required: false
+    default: 'full'
+    choices:
+      - 'full'
+      - 'focused'
+      - 'security'
+  installation-id:
+    description: 'GitHub App installation ID (if known)'
+    required: false
+
+outputs:
+  review-completed:
+    description: 'Whether the review was completed successfully.'
+    value: ${{ steps.review.outputs.completed }}
+  error:
+    description: 'Error message if the review failed'
+    value: ${{ steps.review.outputs.error }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Get Installation ID
+      shell: bash
+      id: get-installation
+      run: |
+        echo "Fetching installation ID for repository ${{ github.repository }}..."
+        
+        # First try installation ID from input
+        if [ -n "${{ inputs.installation-id }}" ]; then
+          INSTALLATION_ID="${{ inputs.installation-id }}"
+          echo "Using provided installation ID: $INSTALLATION_ID"
+        # Then try from webhook payload
+        elif [ -n "${{ github.event.installation.id }}" ]; then
+          INSTALLATION_ID="${{ github.event.installation.id }}"
+          echo "Found installation ID in webhook payload: $INSTALLATION_ID"
+        else
+          # If no installation ID available, call API to get it
+          echo "Fetching installation ID from PeerReview API..."
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" \
+            -H "Authorization: Bearer ${{ inputs.api-key }}" \
+            -H "Accept: application/json" \
+            "${{ inputs.api-endpoint }}/api/installation?owner=${{ github.repository_owner }}&repo=${{ github.event.repository.name }}")
+          
+          # Split response into body and status code
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d':' -f2)
+          RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+          
+          echo "API Response (Status: $HTTP_STATUS):"
+          echo "$RESPONSE_BODY"
+          
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Error: Failed to get installation ID from API. Status code: $HTTP_STATUS"
+            exit 1
+          fi
+          
+          # Try to parse installationId from response
+          INSTALLATION_ID=$(echo "$RESPONSE_BODY" | jq -r '.installationId // empty')
+          
+          if [ -z "$INSTALLATION_ID" ]; then
+            echo "Error: No installation ID found. Make sure the PeerReview app is installed on this repository and the repository is registered in the PeerReview service."
+            exit 1
+          fi
+          
+          echo "Retrieved installation ID from API: $INSTALLATION_ID"
+        fi
+        
+        echo "Using Installation ID: $INSTALLATION_ID"
+        echo "installation_id=$INSTALLATION_ID" >> $GITHUB_OUTPUT
+
+    - name: Trigger PeerReview
+      shell: bash
+      run: |
+        # Create simple JSON payload
+        PAYLOAD='{
+          "action": "opened",
+          "repository": {
+            "owner": {
+              "login": "${{ github.repository_owner }}"
+            },
+            "name": "${{ github.event.repository.name }}"
+          },
+          "pull_request": {
+            "number": ${{ github.event.pull_request.number }}
+          },
+          "installation": {
+            "id": ${{ steps.get-installation.outputs.installation_id }}
+          },
+          "review_type": "${{ inputs.review-type }}"
+        }'
+        
+        echo "Sending webhook payload:"
+        echo "$PAYLOAD" | jq '.'
+        
+        # Send the request
+        RESPONSE=$(curl -s -X POST "${{ inputs.api-endpoint }}/api/webhook" \
+          -H "Content-Type: application/json" \
+          -H "x-github-event: pull_request" \
+          -H "x-github-delivery: ${{ github.event.head_commit.id }}" \
+          -H "Authorization: Bearer ${{ inputs.api-key }}" \
+          -d "$PAYLOAD")
+        
+        echo "Webhook response:"
+        echo "$RESPONSE" | jq '.' || echo "$RESPONSE"
+
+branding:
+  icon: 'shield'
+  color: 'blue' 
