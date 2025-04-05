@@ -1,6 +1,6 @@
 {
   "name": "review-agent",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "GitHub Action for AI-powered code reviews",
   "main": "index.js",
   "scripts": {
@@ -28,4 +28,4 @@
     "url": "https://github.com/PeerReview-ai/review-agent/issues"
   },
   "homepage": "https://github.com/PeerReview-ai/review-agent#readme"
-} 
+}
